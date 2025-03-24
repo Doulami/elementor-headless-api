@@ -7,21 +7,21 @@ class EHA_Renderer {
 
         $bypass_cache = isset($_GET['nocache']) && $_GET['nocache'] === '1';
         $debug        = isset($_GET['debug']) && $_GET['debug'] === '1';
+        $as_json      = isset($_GET['format']) && strtolower($_GET['format']) === 'json';
+        $fields_param = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
 
         if (! $bypass_cache) {
             $cached = get_transient($cache_key);
             if ($cached) {
-                return $this->wrap_debug($cached, $post_id, true, $debug);
+                return $this->final_output($post_id, $cached, true, $debug, $as_json, $fields_param);
             }
         }
 
         $html = '';
 
         if (\Elementor\Plugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
-            // Inject Header/Footer templates
-            $header_id = get_option('eha_header_template_id');
-            $footer_id = get_option('eha_footer_template_id');
-
+            $header_id   = get_option('eha_header_template_id');
+            $footer_id   = get_option('eha_footer_template_id');
             $header_html = $header_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($header_id) : '';
             $footer_html = $footer_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($footer_id) : '';
 
@@ -39,7 +39,7 @@ class EHA_Renderer {
         $html = $this->sanitize_output($html);
         set_transient($cache_key, $html, 12 * HOUR_IN_SECONDS);
 
-        return $this->wrap_debug($html, $post_id, false, $debug);
+        return $this->final_output($post_id, $html, false, $debug, $as_json, $fields_param);
     }
 
     private function sanitize_output($html) {
@@ -47,7 +47,7 @@ class EHA_Renderer {
         return trim($html);
     }
 
-    private function wrap_debug($html, $post_id, $cache_used, $debug) {
+    private function wrap_debug($html, $cache_used, $debug) {
         if (! $debug) return $html;
 
         $info = sprintf(
@@ -58,5 +58,35 @@ class EHA_Renderer {
         );
 
         return $html . $info;
+    }
+
+    private function final_output($post_id, $html, $cache_used, $debug, $as_json, $fields) {
+        $html = $this->wrap_debug($html, $cache_used, $debug);
+
+        if (! $as_json) {
+            return $html;
+        }
+
+        $post     = get_post($post_id);
+        $response = [
+            'id'    => $post_id,
+            'slug'  => $post ? $post->post_name : '',
+            'title' => $post ? get_the_title($post_id) : '',
+            'html'  => $html,
+        ];
+
+        // If fields are specified, filter output
+        if (! empty($fields)) {
+            $response = array_filter(
+                $response,
+                fn($key) => in_array($key, $fields),
+                ARRAY_FILTER_USE_KEY
+            );
+        }
+
+        // Return as JSON
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($response);
+        exit;
     }
 }

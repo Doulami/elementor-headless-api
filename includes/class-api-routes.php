@@ -1,69 +1,102 @@
 <?php
 
-class EHA_Api_Routes {
+class EHA_API_Routes {
 
     public function __construct() {
-        add_action('rest_api_init', [ $this, 'register_routes' ]);
+        add_action('rest_api_init', [$this, 'register_routes']);
     }
 
     public function register_routes() {
-        register_rest_route('headless-elementor/v1', '/page/(?P<id>\d+)', [
-            'methods' => 'GET',
-            'callback' => [$this, 'serve_page_by_id'],
+        register_rest_route('headless-elementor/v1', '/page/(?P<id>\\d+)', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'get_page_by_id'],
             'permission_callback' => '__return_true',
         ]);
 
         register_rest_route('headless-elementor/v1', '/slug/(?P<slug>[a-zA-Z0-9-_]+)', [
-            'methods' => 'GET',
-            'callback' => [$this, 'serve_page_by_slug'],
+            'methods'  => 'GET',
+            'callback' => [$this, 'get_page_by_slug'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('headless-elementor/v1', '/pages', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'get_all_pages'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('headless-elementor/v1', '/status', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'get_status'],
             'permission_callback' => '__return_true',
         ]);
     }
 
-    public function serve_page_by_id($request) {
-        $post_id = absint($request['id']);
-        return $this->render_response($post_id);
+    public function get_page_by_id($data) {
+        return $this->format_response(get_post($data['id']));
     }
 
-    public function serve_page_by_slug($request) {
-        $slug = sanitize_title($request['slug']);
-        $post = get_page_by_path($slug, OBJECT, get_post_types(['public' => true], 'names'));
-
-        if (!$post) {
-            return new WP_REST_Response(['error' => 'Page not found.'], 404);
-        }
-
-        return $this->render_response($post->ID);
+    public function get_page_by_slug($data) {
+        $slug = $data['slug'];
+        $post = get_page_by_path($slug, OBJECT, get_option('eha_allowed_post_types', ['page', 'post']));
+        return $this->format_response($post);
     }
 
-    private function render_response($post_id) {
-        $post_type = get_post_type($post_id);
-        $status = get_post_status($post_id);
+    public function get_all_pages($data) {
+        $args = [
+            'post_type'   => get_option('eha_allowed_post_types', ['page', 'post']),
+            'post_status' => 'publish',
+            'numberposts' => -1,
+        ];
+        $posts = get_posts($args);
 
-        if ($status !== 'publish') {
-            $token = $_GET['token'] ?? '';
-            if (!EHA_Preview_Tokens::validate_token($post_id, $token)) {
-                return new WP_REST_Response(['error' => 'Unauthorized preview.'], 401);
-            }
+        $result = array_map(function($post) {
+            return [
+                'id'    => $post->ID,
+                'slug'  => $post->post_name,
+                'title' => get_the_title($post),
+            ];
+        }, $posts);
+
+        return rest_ensure_response($result);
+    }
+
+    public function get_status() {
+        return [
+            'plugin'            => 'Elementor Headless API',
+            'version'           => '0.2',
+            'elementor_version' => defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : 'unknown',
+            'php_version'       => phpversion(),
+            'allowed_post_types'=> get_option('eha_allowed_post_types', []),
+        ];
+    }
+
+    private function format_response($post) {
+        if (! $post) {
+            return new WP_Error('not_found', 'Page not found', ['status' => 404]);
         }
 
-        if (! $this->is_allowed_post_type($post_type)) {
-            return new WP_REST_Response(['error' => 'Post type not allowed.'], 403);
-        }
+        $fields = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
+        $format = isset($_GET['format']) ? $_GET['format'] : (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json') ? 'json' : 'html');
 
         $renderer = new EHA_Renderer();
-        $html = $renderer->render_elementor_page($post_id);
+        $html     = $renderer->render_elementor_page($post->ID);
 
-        return new WP_REST_Response([
-            'id'    => $post_id,
-            'slug'  => get_post_field('post_name', $post_id),
-            'title' => get_the_title($post_id),
-            'html'  => $html,
-        ]);
-    }
+        if ($format === 'json') {
+            $response = [
+                'id'    => $post->ID,
+                'slug'  => $post->post_name,
+                'title' => get_the_title($post),
+                'html'  => $html,
+            ];
 
-    private function is_allowed_post_type($post_type) {
-        $allowed = get_option('eha_allowed_post_types', ['post', 'page']);
-        return in_array($post_type, $allowed);
+            if (! empty($fields)) {
+                $response = array_intersect_key($response, array_flip($fields));
+            }
+
+            return rest_ensure_response($response);
+        }
+
+        return $html;
     }
 }
