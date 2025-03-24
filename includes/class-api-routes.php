@@ -54,4 +54,5 @@ register_rest_route('headless-elementor/v1', '/slug/(?P<slug>[a-zA-Z0-9-_]+)', [
             'html'  => $html,
         ]);
     }
+  
 }
