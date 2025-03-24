@@ -5,30 +5,47 @@ class EHA_Renderer {
     public function render_elementor_page($post_id) {
         $cache_key = 'eha_cached_html_' . $post_id;
 
-        // 1. Try to get from cache
-        $cached = get_transient($cache_key);
-        if ($cached) {
-            return $cached;
+        $bypass_cache = isset($_GET['nocache']) && $_GET['nocache'] === '1';
+        $debug        = isset($_GET['debug']) && $_GET['debug'] === '1';
+
+        if (! $bypass_cache) {
+            $cached = get_transient($cache_key);
+            if ($cached) {
+                return $this->wrap_debug($cached, $post_id, true, $debug);
+            }
         }
 
-        // 2. Ensure Elementor is active before rendering
-        if ( ! class_exists( 'Elementor\\Plugin' ) ) {
-            return '<!-- Elementor not available -->';
+        $html = '';
+        if (\Elementor\Plugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
+            ob_start();
+            echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($post_id);
+            $html = ob_get_clean();
+        } else {
+            $html = apply_filters('the_content', get_post_field('post_content', $post_id));
         }
 
-        $document = Elementor\\Plugin::$instance->documents->get( $post_id );
-        if ( ! $document || ! $document->is_built_with_elementor() ) {
-            return '<!-- Not an Elementor page -->';
-        }
+        $html = $this->sanitize_output($html);
+        set_transient($cache_key, $html, 12 * HOUR_IN_SECONDS);
 
-        ob_start();
-        echo Elementor\\Plugin::instance()->frontend->get_builder_content_for_display( $post_id );
-        $html = ob_get_clean();
-
-        // 3. Cache it for 12 hours
-        set_transient( $cache_key, $html, 12 * HOUR_IN_SECONDS );
-
-        return apply_filters( 'eha_rendered_html', $html, $post_id );
+        return $this->wrap_debug($html, $post_id, false, $debug);
     }
 
+    private function sanitize_output($html) {
+        $html = preg_replace('/<\?php.*?\?>/s', '', $html);
+        return trim($html);
+    }
+
+    private function wrap_debug($html, $post_id, $cache_used, $debug) {
+        if (! $debug) return $html;
+
+        $info = sprintf(
+            "
+<!-- Debug Info: Elementor %s | Cache Used: %s | Rendered at: %s -->",
+            defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : 'unknown',
+            $cache_used ? 'true' : 'false',
+            current_time('mysql')
+        );
+
+        return $html . $info;
+    }
 }
