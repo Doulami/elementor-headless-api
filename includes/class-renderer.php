@@ -16,10 +16,22 @@ class EHA_Renderer {
         }
 
         $html = '';
+
         if (\Elementor\Plugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
+            // Inject Header/Footer templates
+            $header_id = get_option('eha_header_template_id');
+            $footer_id = get_option('eha_footer_template_id');
+
+            $header_html = $header_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($header_id) : '';
+            $footer_html = $footer_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($footer_id) : '';
+
             ob_start();
             echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($post_id);
-            $html = ob_get_clean();
+            $main_html = ob_get_clean();
+
+            $html = "<!-- EHA:HEADER -->\n" . $header_html .
+                    "\n<!-- EHA:MAIN -->\n" . $main_html .
+                    "\n<!-- EHA:FOOTER -->\n" . $footer_html;
         } else {
             $html = apply_filters('the_content', get_post_field('post_content', $post_id));
         }
@@ -39,8 +51,7 @@ class EHA_Renderer {
         if (! $debug) return $html;
 
         $info = sprintf(
-            "
-<!-- Debug Info: Elementor %s | Cache Used: %s | Rendered at: %s -->",
+            "\n<!-- Debug Info: Elementor %s | Cache Used: %s | Rendered at: %s -->",
             defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : 'unknown',
             $cache_used ? 'true' : 'false',
             current_time('mysql')
