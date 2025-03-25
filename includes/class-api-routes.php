@@ -32,71 +32,65 @@ class EHA_API_Routes {
         ]);
     }
 
-    public function get_page_by_id($data) {
-        return $this->format_response(get_post($data['id']));
-    }
+    public function get_page_by_id($request) {
+        $post_id = intval($request['id']);
+        $post    = get_post($post_id);
 
-    public function get_page_by_slug($data) {
-        $slug = $data['slug'];
-        $post = get_page_by_path($slug, OBJECT, get_option('eha_allowed_post_types', ['page', 'post']));
-        return $this->format_response($post);
-    }
-
-    public function get_all_pages($data) {
-        $args = [
-            'post_type'   => get_option('eha_allowed_post_types', ['page', 'post']),
-            'post_status' => 'publish',
-            'numberposts' => -1,
-        ];
-        $posts = get_posts($args);
-
-        $result = array_map(function($post) {
-            return [
-                'id'    => $post->ID,
-                'slug'  => $post->post_name,
-                'title' => get_the_title($post),
-            ];
-        }, $posts);
-
-        return rest_ensure_response($result);
-    }
-
-    public function get_status() {
-        return [
-            'plugin'            => 'Elementor Headless API',
-            'version'           => '0.2',
-            'elementor_version' => defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : 'unknown',
-            'php_version'       => phpversion(),
-            'allowed_post_types'=> get_option('eha_allowed_post_types', []),
-        ];
-    }
-
-    private function format_response($post) {
-        if (! $post) {
-            return new WP_Error('not_found', 'Page not found', ['status' => 404]);
+        if (! $post || !EHA_Settings::post_type_allowed($post->post_type)) {
+            return new WP_Error('not_allowed', 'Post type not allowed or post not found.', ['status' => 404]);
         }
-
-        $fields = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
-        $format = isset($_GET['format']) ? $_GET['format'] : (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json') ? 'json' : 'html');
 
         $renderer = new EHA_Renderer();
-        $html     = $renderer->render_elementor_page($post->ID);
+        return $renderer->render_elementor_page($post_id);
+    }
 
-        if ($format === 'json') {
-            $response = [
-                'id'    => $post->ID,
-                'slug'  => $post->post_name,
-                'title' => get_the_title($post),
-                'html'  => $html,
-            ];
+    public function get_page_by_slug($request) {
+        $slug = sanitize_title($request['slug']);
 
-            if (! empty($fields)) {
-                $response = array_intersect_key($response, array_flip($fields));
-            }
+        $query = new WP_Query([
+            'name'           => $slug,
+            'post_type'      => EHA_Settings::get_allowed_post_types(),
+            'posts_per_page' => 1,
+            'post_status'    => 'publish',
+        ]);
 
-            return rest_ensure_response($response);
+        if (! $query->have_posts()) {
+            return new WP_Error('not_found', 'Page not found or not allowed.', ['status' => 404]);
         }
 
-        return $html;
+        $post = $query->posts[0];
+        $renderer = new EHA_Renderer();
+        return $renderer->render_elementor_page($post->ID);
+    }
+
+    public function get_all_pages($request) {
+        $posts = get_posts([
+            'post_type'      => EHA_Settings::get_allowed_post_types(),
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+        ]);
+
+        $result = [];
+
+        foreach ($posts as $post) {
+            $result[] = [
+                'id'    => $post->ID,
+                'title' => get_the_title($post),
+                'slug'  => $post->post_name,
+                'type'  => $post->post_type,
+                'link'  => get_permalink($post),
+            ];
+        }
+
+        return $result;
+    }
+
+    public function get_status($request) {
+        return [
+            'status'   => 'ok',
+            'time'     => current_time('mysql'),
+            'version'  => ELEMENTOR_VERSION,
+            'allowed_post_types' => EHA_Settings::get_allowed_post_types(),
+        ];
     }
 }

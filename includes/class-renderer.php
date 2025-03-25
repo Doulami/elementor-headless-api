@@ -1,16 +1,17 @@
 <?php
 
+use Elementor\Plugin as ElementorPlugin;
+
 class EHA_Renderer {
 
     public function render_elementor_page($post_id) {
-        $cache_key = 'eha_cached_html_' . $post_id;
+        $cache_key     = 'eha_cached_html_' . $post_id;
+        $bypass_cache  = isset($_GET['nocache']) && $_GET['nocache'] === '1' && EHA_Settings::allow_nocache();
+        $debug         = isset($_GET['debug']) && $_GET['debug'] === '1' && EHA_Settings::debug_enabled();
+        $as_json       = isset($_GET['format']) && strtolower($_GET['format']) === 'json' && EHA_Settings::json_enabled();
+        $fields_param  = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
 
-        $bypass_cache = isset($_GET['nocache']) && $_GET['nocache'] === '1';
-        $debug        = isset($_GET['debug']) && $_GET['debug'] === '1';
-        $as_json      = isset($_GET['format']) && strtolower($_GET['format']) === 'json';
-        $fields_param = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
-
-        if (! $bypass_cache) {
+        if (!$bypass_cache && EHA_Settings::cache_enabled()) {
             $cached = get_transient($cache_key);
             if ($cached) {
                 return $this->final_output($post_id, $cached, true, $debug, $as_json, $fields_param);
@@ -19,74 +20,92 @@ class EHA_Renderer {
 
         $html = '';
 
-        if (\Elementor\Plugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
-            $header_id   = get_option('eha_header_template_id');
-            $footer_id   = get_option('eha_footer_template_id');
-            $header_html = $header_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($header_id) : '';
-            $footer_html = $footer_id ? \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($footer_id) : '';
-
+        if (ElementorPlugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
             ob_start();
-            echo \Elementor\Plugin::instance()->frontend->get_builder_content_for_display($post_id);
-            $main_html = ob_get_clean();
 
-            $html = "<!-- EHA:HEADER -->\n" . $header_html .
-                    "\n<!-- EHA:MAIN -->\n" . $main_html .
-                    "\n<!-- EHA:FOOTER -->\n" . $footer_html;
-        } else {
-            $html = apply_filters('the_content', get_post_field('post_content', $post_id));
+            // Inject Header
+            $header_id = EHA_Settings::inject_header_id();
+            if ($header_id) {
+                echo ElementorPlugin::instance()->frontend->get_builder_content_for_display($header_id);
+            }
+
+            // Main Content
+            echo ElementorPlugin::instance()->frontend->get_builder_content_for_display($post_id, true);
+
+            // Inject Footer
+            $footer_id = EHA_Settings::inject_footer_id();
+            if ($footer_id) {
+                echo ElementorPlugin::instance()->frontend->get_builder_content_for_display($footer_id);
+            }
+
+            $html = ob_get_clean();
+
+            // Add global styles if enabled
+            if (EHA_Settings::include_global_styles()) {
+                $html = $this->inject_global_styles($html);
+            }
+
+            // Strip WP head/footer noise if enabled
+            if (EHA_Settings::strip_wp_noise()) {
+                $html = $this->clean_html_output($html);
+            }
         }
 
-        $html = $this->sanitize_output($html);
-        set_transient($cache_key, $html, 12 * HOUR_IN_SECONDS);
+        if (EHA_Settings::cache_enabled()) {
+            set_transient($cache_key, $html, EHA_Settings::get_cache_ttl());
+        }
 
         return $this->final_output($post_id, $html, false, $debug, $as_json, $fields_param);
     }
 
-    private function sanitize_output($html) {
-        $html = preg_replace('/<\?php.*?\?>/s', '', $html);
-        return trim($html);
-    }
+    protected function final_output($post_id, $html, $cache_used = false, $debug = false, $as_json = false, $fields = []) {
+        if ($as_json) {
+            $response = [
+                'id'    => $post_id,
+                'html'  => in_array('html', $fields) || empty($fields) ? $html : null,
+                'debug' => $debug ? [
+                    'cache_used'        => $cache_used,
+                    'elementor_version' => \Elementor\Plugin::instance()->get_version(),
+                    'rendered_at'       => current_time('mysql')
+                ] : null
+            ];
 
-    private function wrap_debug($html, $cache_used, $debug) {
-        if (! $debug) return $html;
+            if (EHA_Settings::include_meta()) {
+                $response['meta'] = get_post_meta($post_id);
+            }
 
-        $info = sprintf(
-            "\n<!-- Debug Info: Elementor %s | Cache Used: %s | Rendered at: %s -->",
-            defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : 'unknown',
-            $cache_used ? 'true' : 'false',
-            current_time('mysql')
-        );
+            if (EHA_Settings::include_terms()) {
+                $response['terms'] = wp_get_post_terms($post_id, get_object_taxonomies(get_post_type($post_id)));
+            }
 
-        return $html . $info;
-    }
+            if (EHA_Settings::include_acf() && function_exists('get_fields')) {
+                $response['acf'] = get_fields($post_id);
+            }
 
-    private function final_output($post_id, $html, $cache_used, $debug, $as_json, $fields) {
-        $html = $this->wrap_debug($html, $cache_used, $debug);
-
-        if (! $as_json) {
-            return $html;
+            return $response;
         }
 
-        $post     = get_post($post_id);
-        $response = [
-            'id'    => $post_id,
-            'slug'  => $post ? $post->post_name : '',
-            'title' => $post ? get_the_title($post_id) : '',
-            'html'  => $html,
-        ];
-
-        // If fields are specified, filter output
-        if (! empty($fields)) {
-            $response = array_filter(
-                $response,
-                fn($key) => in_array($key, $fields),
-                ARRAY_FILTER_USE_KEY
+        if ($debug) {
+            $debug_block = sprintf(
+                "<!-- Debug: Elementor v%s | Rendered at %s | Cache used: %s -->",
+                \Elementor\Plugin::instance()->get_version(),
+                current_time('mysql'),
+                $cache_used ? 'true' : 'false'
             );
+            $html .= $debug_block;
         }
 
-        // Return as JSON
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($response);
-        exit;
+        return $html;
+    }
+
+    protected function clean_html_output($html) {
+        // TODO: Implement stripping of <head>, admin bars, etc.
+        return $html;
+    }
+
+    protected function inject_global_styles($html) {
+        ob_start();
+        \Elementor\Plugin::instance()->frontend->enqueue_styles();
+        return $html . ob_get_clean();
     }
 }

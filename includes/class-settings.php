@@ -1,91 +1,96 @@
 <?php
+// includes/class-settings.php
+
+if (!defined('ABSPATH')) {
+    exit;
+}
 
 class EHA_Settings {
 
-    public static function init() {
-        add_action('admin_menu', [__CLASS__, 'add_admin_menu']);
-        add_action('admin_init', [__CLASS__, 'register_settings']);
-    }
+    protected static $settings = null;
 
-    
-    public static function add_admin_menu() {
-        add_options_page(
-            'Elementor Headless API',
-            'Elementor Headless API',
-            'manage_options',
-            'elementor-headless-api',
-            [__CLASS__, 'render_settings_page']
-        );
-    }
-
-    public static function register_settings() {
-        register_setting('eha_settings_group', 'eha_allowed_post_types');
-
-        add_settings_section(
-            'eha_main_section',
-            'Main Settings',
-            null,
-            'elementor-headless-api'
-        );
-
-        add_settings_field(
-            'eha_allowed_post_types',
-            'Allowed Post Types',
-            [__CLASS__, 'allowed_post_types_field'],
-            'elementor-headless-api',
-            'eha_main_section'
-        );
-        register_setting('eha_settings_group', 'eha_header_template_id');
-        register_setting('eha_settings_group', 'eha_footer_template_id');
-
-        add_settings_field(
-            'eha_header_template_id',
-            'Header Template ID',
-            [__CLASS__, 'header_template_field'],
-            'elementor-headless-api',
-            'eha_main_section'
-        );
-
-        add_settings_field(
-            'eha_footer_template_id',
-            'Footer Template ID',
-            [__CLASS__, 'footer_template_field'],
-            'elementor-headless-api',
-            'eha_main_section'
-        );
-
-    }
-
-    public static function allowed_post_types_field() {
-        $post_types = get_post_types(['public' => true], 'objects');
-        $selected = (array) get_option('eha_allowed_post_types', ['page', 'post']);
-
-        foreach ($post_types as $slug => $pt) {
-            echo '<label><input type="checkbox" name="eha_allowed_post_types[]" value="' . esc_attr($slug) . '" ' . checked(in_array($slug, $selected), true, false) . '> ' . esc_html($pt->label) . '</label><br>';
+    public static function get($key, $default = null) {
+        if (self::$settings === null) {
+            self::$settings = get_option('eha_settings', []);
         }
+        return isset(self::$settings[$key]) ? self::$settings[$key] : $default;
     }
-    public static function header_template_field() {
-        $value = get_option('eha_header_template_id', '');
-        echo '<input type="number" name="eha_header_template_id" value="' . esc_attr($value) . '" class="regular-text">';
-        echo '<p class="description">Enter the Elementor Template ID to inject as the Header.</p>';
-    }
-    
-    public static function footer_template_field() {
-        $value = get_option('eha_footer_template_id', '');
-        echo '<input type="number" name="eha_footer_template_id" value="' . esc_attr($value) . '" class="regular-text">';
-        echo '<p class="description">Enter the Elementor Template ID to inject as the Footer.</p>';
-    }
-    
 
-    public static function render_settings_page() {
-        echo '<div class="wrap">';
-        echo '<h1>Elementor Headless API Settings</h1>';
-        echo '<form method="post" action="options.php">';
-        settings_fields('eha_settings_group');
-        do_settings_sections('elementor-headless-api');
-        submit_button();
-        echo '</form></div>';
+    public static function is_enabled($key) {
+        return self::get($key) ? true : false;
+    }
+
+    public static function get_allowed_post_types() {
+        return self::get('allowed_post_types', []);
+    }
+
+    public static function post_type_allowed($post_type) {
+        $allowed = self::get_allowed_post_types();
+        return in_array($post_type, $allowed);
+    }
+
+    public static function cache_enabled() {
+        return self::is_enabled('enable_cache');
+    }
+
+    public static function get_cache_ttl() {
+        $ttl = intval(self::get('cache_duration', 12));
+        return max(1, $ttl) * HOUR_IN_SECONDS;
+    }
+
+    public static function allow_nocache() {
+        return self::is_enabled('allow_nocache');
+    }
+
+    public static function debug_enabled() {
+        return self::is_enabled('enable_debug');
+    }
+
+    public static function include_global_styles() {
+        return self::is_enabled('include_global_styles');
+    }
+
+    public static function strip_wp_noise() {
+        return self::is_enabled('strip_wp_noise');
+    }
+
+    public static function inject_header_id() {
+        return absint(self::get('inject_header'));
+    }
+
+    public static function inject_footer_id() {
+        return absint(self::get('inject_footer'));
+    }
+
+    public static function json_enabled() {
+        return self::is_enabled('enable_json');
+    }
+
+    public static function include_acf() {
+        return self::is_enabled('include_acf');
+    }
+
+    public static function include_meta() {
+        return self::is_enabled('include_meta');
+    }
+
+    public static function include_terms() {
+        return self::is_enabled('include_terms');
+    }
+
+    public static function tokens_enabled() {
+        return self::is_enabled('enable_tokens');
+    }
+
+    public static function token_expiry_hours() {
+        return intval(self::get('token_expiry', 24));
+    }
+
+    public static function tokens_private_only() {
+        return self::is_enabled('tokens_private_only');
+    }
+
+    public static function suppress_textdomain_notice() {
+        return self::is_enabled('suppress_textdomain_notice');
     }
 }
-
-EHA_Settings::init();
