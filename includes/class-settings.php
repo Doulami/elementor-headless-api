@@ -1,11 +1,16 @@
 <?php
-// includes/class-settings.php
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
+
 class EHA_Settings {
+    
+    public static function is_inline_css_enabled() {
+        return get_option('elementor_css_print_method') === 'internal';
+    }
+
 
     protected static $settings = null;
 
@@ -93,4 +98,13 @@ class EHA_Settings {
     public static function suppress_textdomain_notice() {
         return self::is_enabled('suppress_textdomain_notice');
     }
+    
+    /**
+     * Get the Elementor template ID used for WooCommerce product rendering.
+     */
+    public static function get_product_template_id() {
+        return intval(get_option('eha_product_template_id'));
+    }
 }
+
+
