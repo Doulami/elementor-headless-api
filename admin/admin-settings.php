@@ -281,15 +281,21 @@ function eha_get_all_stylesheets($page_id) {
         }
     }
 
-    // Add Elementor global stylesheets
+    // Get Elementor global styles - manually inspect the styles
     if (class_exists('Elementor\Plugin')) {
-        $global_styles = ElementorPlugin::$instance->frontend->enqueue_styles();
-        foreach ($global_styles as $style) {
-            $stylesheets['global'][] = [
-                'id' => $style['id'],
-                'url' => $style['src'],
-                'label' => $style['handle']
-            ];
+        // Check if Elementor frontend exists and pull global stylesheets
+        $elementor_styles = ElementorPlugin::$instance->frontend->get_stylesheets();
+        
+        // Push global styles into the 'global' group
+        foreach ($elementor_styles as $style) {
+            // Verify that $style contains a valid URL
+            if (isset($style['src'])) {
+                $stylesheets['global'][] = [
+                    'id' => $style['id'] ?? '',
+                    'url' => $style['src'],
+                    'label' => $style['handle'] ?? 'Global Style'
+                ];
+            }
         }
     }
 
