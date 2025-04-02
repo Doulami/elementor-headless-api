@@ -5,7 +5,13 @@
  * Version: 1.2
  * Author: Wappdev
  */
-
+// Define GitHub repository details for GitHub Updater
+if ( !defined( 'GHUPDATER_PLUGIN' ) ) {
+    define( 'GHUPDATER_PLUGIN', true );
+    define( 'GHUPDATER_USER', 'Doulami' );  // Replace with your GitHub username
+    define( 'GHUPDATER_REPO', 'elementor-headless-api' );       // Replace with your GitHub repo name
+ //   define( 'GHUPDATER_TOKEN', 'your-github-token' );   // Optional: Replace with your GitHub token if using a private repo
+}
 if (!defined('ABSPATH')) exit;
 
 define('EHA_PATH', plugin_dir_path(__FILE__));
