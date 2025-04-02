@@ -234,9 +234,70 @@ function eha_add_tools_debug_page() {
     );
 }
 
-// Function to render the tools/debug page interface for selecting a page and stylesheets
+
+
+add_action('admin_enqueue_scripts', 'eha_enqueue_code_editor');
+
+function eha_get_all_pages() {
+    // Fetch all published pages
+    $args = [
+        'post_type'      => 'page',        // We are fetching pages
+        'posts_per_page' => -1,            // Fetch all pages (no limit)
+        'post_status'    => 'publish',     // Only published pages
+    ];
+
+    // Use get_posts() to retrieve the pages
+    $pages = get_posts($args);
+
+    // Return the list of pages
+    return $pages;
+}
+function eha_get_all_stylesheets($page_id) {
+    // Initialize an empty array to store stylesheets
+    $stylesheets = [
+        'theme' => [],
+        'elementor' => [],
+        'global' => [],  // Added a 'global' group for global styles
+        'other' => []
+    ];
+
+    // Get stylesheets enqueued by WordPress (theme and plugins)
+    global $wp_styles;
+
+    foreach ($wp_styles->queue as $handle) {
+        $stylesheet = $wp_styles->registered[$handle];
+        $stylesheet_url = $stylesheet->src;
+
+        // Group by theme, Elementor, global, or other sources
+        if (strpos($stylesheet_url, get_stylesheet_directory_uri()) !== false) {
+            // If the stylesheet is from the theme
+            $stylesheets['theme'][] = ['id' => $handle, 'url' => $stylesheet_url, 'label' => $stylesheet->handle];
+        } elseif (strpos($stylesheet_url, 'elementor') !== false) {
+            // If the stylesheet is from Elementor
+            $stylesheets['elementor'][] = ['id' => $handle, 'url' => $stylesheet_url, 'label' => $stylesheet->handle];
+        } else {
+            // Other sources
+            $stylesheets['other'][] = ['id' => $handle, 'url' => $stylesheet_url, 'label' => $stylesheet->handle];
+        }
+    }
+
+    // Add Elementor global stylesheets
+    if (class_exists('Elementor\Plugin')) {
+        $global_styles = ElementorPlugin::$instance->frontend->enqueue_styles();
+        foreach ($global_styles as $style) {
+            $stylesheets['global'][] = [
+                'id' => $style['id'],
+                'url' => $style['src'],
+                'label' => $style['handle']
+            ];
+        }
+    }
+
+    return $stylesheets;
+}
+
 function eha_render_debug_interface() {
-    // Get a list of all pages (reusing the existing get_all_pages function)
+    // Get all pages (use the previously defined function)
     $pages = eha_get_all_pages();
 
     ?>
@@ -246,21 +307,27 @@ function eha_render_debug_interface() {
             <!-- Page Selector -->
             <label for="page-selector">Select a Page</label>
             <select name="page-id" id="page-selector">
-                <?php foreach( $pages as $page ) : ?>
-                    <option value="<?php echo esc_attr( $page['ID'] ); ?>"><?php echo esc_html( $page['post_title'] ); ?></option>
+                <?php foreach ($pages as $page) : ?>
+                    <option value="<?php echo esc_attr($page->ID); ?>"><?php echo esc_html($page->post_title); ?></option>
                 <?php endforeach; ?>
             </select>
 
             <!-- Stylesheet Selector -->
             <h3>Select Stylesheets</h3>
+
             <?php 
-            // Get stylesheets for the selected page (fetch styles dynamically from the page)
-            $stylesheets = eha_get_page_stylesheets( $pages[0]['ID'] ); // Assume we fetch styles for the first page by default
-            foreach( $stylesheets as $stylesheet ) : ?>
-                <label for="stylesheet-<?php echo esc_attr( $stylesheet['id'] ); ?>">
-                    <input type="checkbox" name="stylesheets[]" id="stylesheet-<?php echo esc_attr( $stylesheet['id'] ); ?>" value="<?php echo esc_attr( $stylesheet['url'] ); ?>" checked />
-                    <?php echo esc_html( $stylesheet['url'] ); ?>
-                </label><br>
+            // Get all stylesheets for the selected page
+            $stylesheets = eha_get_all_stylesheets($pages[0]->ID); // Default to the first page
+
+            // Grouped stylesheets
+            foreach ($stylesheets as $group => $group_stylesheets) : ?>
+                <h4><?php echo ucfirst($group); ?> Stylesheets</h4>
+                <?php foreach ($group_stylesheets as $stylesheet) : ?>
+                    <label for="stylesheet-<?php echo esc_attr($stylesheet['id']); ?>">
+                        <input type="checkbox" name="stylesheets[]" id="stylesheet-<?php echo esc_attr($stylesheet['id']); ?>" value="<?php echo esc_attr($stylesheet['url']); ?>" checked />
+                        <?php echo esc_html($stylesheet['label']); ?>
+                    </label><br>
+                <?php endforeach; ?>
             <?php endforeach; ?>
 
             <!-- Render Button -->
@@ -274,16 +341,15 @@ function eha_render_debug_interface() {
         <div id="editor" style="height: 400px; width: 100%;"></div>  <!-- Container for the Ace Editor -->
 
         <?php
-        // If the form is submitted, render the page HTML
-        if ( isset( $_POST['render-page'] ) ) {
+        if (isset($_POST['render-page'])) {
             $page_id = $_POST['page-id'];
-            $selected_stylesheets = isset( $_POST['stylesheets'] ) ? $_POST['stylesheets'] : [];
+            $selected_stylesheets = isset($_POST['stylesheets']) ? $_POST['stylesheets'] : [];
 
-            // Get the page content
-            $html_content = eha_render_page_html( $page_id, $selected_stylesheets ); // This function will render the HTML
+            // Render the page HTML with selected stylesheets
+            $html_content = eha_render_page_html($page_id, $selected_stylesheets);
 
             echo '<h3>Rendered HTML</h3>';
-            echo '<pre>' . esc_html( $html_content ) . '</pre>'; // Display HTML in a preformatted block
+            echo '<pre>' . esc_html($html_content) . '</pre>';
         }
         ?>
     </div>
@@ -291,16 +357,15 @@ function eha_render_debug_interface() {
     <script type="text/javascript">
         // Initialize Ace Editor
         var editor = ace.edit("editor");
-        editor.setTheme("ace/theme/monokai"); // Set the theme
-        editor.getSession().setMode("ace/mode/html"); // Set the mode to HTML
+        editor.setTheme("ace/theme/monokai"); 
+        editor.getSession().setMode("ace/mode/html");
 
         // Set the content of the editor with the rendered HTML
-        editor.setValue('<?php echo addslashes($html_content); ?>'); // Add the PHP HTML content into the editor
-
-        // Optional: You can also listen to changes and send them back to the server (save functionality).
+        editor.setValue('<?php echo addslashes($html_content); ?>');
     </script>
     <?php
 }
+
 function eha_enqueue_code_editor() {
     // Only load on the tools/debug page
     if (isset($_GET['page']) && $_GET['page'] == 'eha-render-debug') {
@@ -309,5 +374,3 @@ function eha_enqueue_code_editor() {
         wp_enqueue_style('ace-editor-style', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-monokai.min.css', [], null);
     }
 }
-
-add_action('admin_enqueue_scripts', 'eha_enqueue_code_editor');

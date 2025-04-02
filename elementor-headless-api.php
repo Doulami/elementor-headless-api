@@ -7,6 +7,7 @@
  */
 // Define GitHub repository details for GitHub Updater
 if ( !defined( 'GHUPDATER_PLUGIN' ) ) {
+    define( 'GHUPDATER_DEBUG', true );
     define( 'GHUPDATER_PLUGIN', true );
     define( 'GHUPDATER_USER', 'Doulami' );  // Replace with your GitHub username
     define( 'GHUPDATER_REPO', 'elementor-headless-api' );       // Replace with your GitHub repo name
