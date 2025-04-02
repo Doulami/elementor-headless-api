@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Elementor Headless API
  * Description: Exposes Elementor-rendered pages as static HTML via REST API for headless usage.
- * Version: 0.2
- * Author: Your Name
+ * Version: 1.2
+ * Author: Wappdev
  */
 
 if (!defined('ABSPATH')) exit;
