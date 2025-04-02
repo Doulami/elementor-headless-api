@@ -16,6 +16,7 @@ require_once EHA_PATH . 'includes/class-settings.php';
 require_once EHA_PATH . 'includes/class-renderer.php';
 require_once EHA_PATH . 'includes/class-api-routes.php';
 require_once EHA_PATH . 'includes/class-preview-tokens.php';
+require_once EHA_PATH . 'includes/class-template-suggestions-api.php';
 
 // ✅ Load Woo routes only if WooCommerce is active
 if ( in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {

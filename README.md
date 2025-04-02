@@ -1,195 +1,108 @@
+
 # Elementor Headless API
 
-Expose Elementor-rendered pages as clean, static HTML via REST API — ideal for headless frontends (e.g., Next.js, Astro, Nuxt, etc.).
+The **Elementor Headless API** plugin provides a headless solution for rendering Elementor templates via REST API endpoints. This plugin is designed to integrate Elementor with a headless WordPress setup, allowing you to serve Elementor-rendered pages to a frontend that doesn't rely on WordPress' traditional theme system. It supports WooCommerce integration and provides flexible customization options.
 
----
+## Features
 
-## 🔧 Features
+- **Headless Elementor Rendering**: Render Elementor templates and content using REST API routes.
+- **WooCommerce Support**: Fetch WooCommerce products and product pages via the REST API.
+- **Token-Based Preview Access**: Secure token-based access for private previews of pages.
+- **Custom Post Type Support**: Render any custom post types created in WordPress via the API.
+- **Template Injection**: Dynamic header/footer injections for Elementor templates.
+- **Advanced JSON Output**: JSON-based output with support for filtering fields and custom formats.
+- **Selective Post Type Control**: Admin settings page to configure allowed post types for rendering.
+- **AJAX-Powered Admin UI**: Easily select Elementor templates via dynamic dropdowns in the admin interface.
 
-- ✅ REST API Endpoints:
-  - `/wp-json/headless-elementor/v1/page/{id}`
-  - `/wp-json/headless-elementor/v1/slug/{slug}`
-  - `/wp-json/headless-elementor/v1/pages` (list all published Elementor pages/posts)
-  - `/wp-json/headless-elementor/v1/status` (plugin health)
+## Installation
 
-- ⚡ **Elementor Rendering**:
-  - Uses `get_builder_content_for_display()`
-  - Includes Elementor inline styles
-  - Clean, stripped-down HTML (no WP headers/footers)
+1. Upload the plugin folder to `wp-content/plugins/` on your WordPress site.
+2. Activate the plugin through the WordPress admin interface.
+3. Configure the settings through the **Admin Settings** page (`Elementor Headless API` → `Settings`).
 
-- 🧹 Clean HTML Output:
-  - No admin bar, meta tags, or theme interference
-  - Errors and notices stripped from output (ongoing improvement)
+## Plugin Files and Structure
 
-- 🧁 Caching:
-  - HTML rendered output is cached via WordPress transients
-  - Use `?nocache=1` to bypass cache
-  - Cache TTL: 12 hours (default)
+### Main Plugin File
+- **elementor-headless-api.php**: The main plugin file that handles the plugin's core functionality.
 
-- 🧪 Debug Mode:
-  - Use `?debug=1` for info on:
-    - Elementor version
-    - Render timestamp
-    - Whether cache was used
+### Includes Directory
+- **class-api-routes.php**: Defines REST API routes to fetch Elementor-rendered pages and WooCommerce products.
+- **class-renderer.php**: Contains the logic for rendering Elementor templates.
+- **class-utils.php**: Helper functions used across the plugin.
+- **class-preview-tokens.php**: Manages token-based preview functionality.
+- **class-settings.php**: Handles settings for allowed post types and configuration.
+- **class-woocommerce-api-routes.php**: Contains additional routes for fetching WooCommerce product information.
+- **class-template-suggestions-api.php**: Provides API endpoints for template suggestions.
 
-- 🔐 Token-Based Preview:
-  - Per-post preview token via meta box
-  - Preview via: `/slug/post-slug?token=XYZ`
-  - Expirable or revocable tokens (TBD)
+### Admin Directory
+- **admin-settings.php**: Provides the user interface for configuring the plugin’s settings, including allowed post types and WooCommerce template IDs.
 
-- ⚙️ Admin Settings:
-  - Enable specific post types for API rendering
-  - UI under Settings → Elementor Headless
+### Assets Directory
+- **js/**: Contains JavaScript files for the frontend SDK, including AJAX interactions for template selectors and other dynamic content loading.
 
----
+### Templates Directory
+- **dynamic-placeholder.php**: A template file for dynamic content placeholders.
 
-## 📦 Usage
+## Usage
 
-### Get Structured JSON with Fields
+Once the plugin is activated and configured, you can use the following API endpoints:
 
-Use `?format=json` to get structured API responses. Control fields with `?fields=`:
+- **Page Rendering**: `GET /headless-elementor/v1/page/{slug}` – Fetch a rendered page by slug.
+- **WooCommerce Product Rendering**: `GET /headless-elementor/v1/product/{slug}` – Fetch a WooCommerce product page.
+- **Token-Based Preview**: `GET /headless-elementor/v1/preview/{token}` – Preview a page with a token-based access control.
+- **Template Suggestions**: `GET /headless-elementor/v1/template-suggestions` – Get suggestions for Elementor templates to use in your headless setup.
 
-```
-/wp-json/headless-elementor/v1/slug/home?format=json&fields=id,title,html,acf,meta,terms
-```
+### Example Request:
 
-Supported fields:
-- `id`, `title`, `slug`, `type`
-- `html` (Elementor-rendered)
-- `acf` (if ACF plugin is active)
-- `meta` (post meta fields)
-- `terms` (taxonomy slugs)
-- `debug` (optional, use `?debug=1`)
-
-### Get Page by ID
-```
-/wp-json/headless-elementor/v1/page/123
+```bash
+GET /wp-json/headless-elementor/v1/page/my-page
 ```
 
-### Get Page by Slug
-```
-/wp-json/headless-elementor/v1/slug/home
-```
+### Example Response:
 
-### Clear Cache for a Page
-```
-/wp-json/headless-elementor/v1/slug/home?nocache=1
-```
-
-### View Debug Output
-```
-/wp-json/headless-elementor/v1/slug/home?debug=1
+```json
+{
+  "content": "<div>...</div>",
+  "status": "success"
+}
 ```
 
-### Token Preview
-```
-/wp-json/headless-elementor/v1/slug/sample-page?token=abc123
-```
+## Admin Settings
 
----
+The plugin includes an admin settings page where you can manage the following:
 
-## 🧩 Coming Soon
+- **Allowed Post Types**: Choose which post types are allowed for rendering.
+- **WooCommerce Product Template ID**: Set a fallback template for WooCommerce products.
+- **Inject Header/Footer**: Define which Elementor templates to inject as headers and footers.
 
-- 🌍 Global styles (Elementor Site Settings)
-- 🛒 WooCommerce rendering support
-- 🧱 Header/Footer injection templates
-- 🔐 JWT-based secure preview access
-- 📊 Logs/metrics for preview link usage
-- 📦 Frontend SDK for data fetching (JS/TS)
+### Token-Based Preview Access
+To access a preview of any page, you need to generate a preview token using the admin interface. This token can be used to view a page via a private URL.
 
----
+## Frontend SDK
 
-### ✅ Already Implemented:
-- 🧠 ACF fields integration (via `?fields=acf`)
-- 🧬 JSON fallback support (`?format=json`)
-- 🎯 Field filtering via `fields=html,meta,...`)
----
+The plugin comes with a modular **Frontend SDK** to help you easily fetch content via the REST API. The SDK includes functions like:
 
-## 📁 Folder Structure
+- `fetchPageBySlug`: Fetch a page by its slug.
+- `fetchWooProduct`: Fetch a WooCommerce product by its slug.
+- `fetchAllWooProducts`: Fetch all WooCommerce products.
+- `fetchWooProductBySlug`: Fetch a WooCommerce product by its slug.
 
-```
-elementor-headless-api/
-├── elementor-headless-api.php         # Main plugin loader
-├── README.md                          # Plugin documentation
-├── admin/
-│   └── admin-settings.php             # Admin settings UI
-├── includes/
-│   ├── class-api-routes.php           # REST API endpoints
-│   ├── class-renderer.php             # Elementor rendering
-│   ├── class-preview-tokens.php       # Token preview logic
-│   ├── class-settings.php             # Post type config
-│   └── class-utils.php                # Helpers
-├── templates/
-│   └── dynamic-placeholder.php        # Future injections
+### Example Usage of SDK:
+
+```javascript
+import { fetchPageBySlug } from 'headless-elementor-sdk';
+
+const page = await fetchPageBySlug('my-page');
+console.log(page.content);
 ```
 
----
+## Roadmap
 
-## 👥 Maintained by
-**Wappdev** – [wappdev.co.uk](https://wappdev.co.uk)
+- Add support for ACF (Advanced Custom Fields) rendering.
+- Improve the JSON output structure with selective field rendering.
+- Add caching strategies to enhance performance.
+- Provide more granular control over Elementor widget rendering.
 
----
+## Contributing
 
-## 🪪 License
-GPLv2 or later. Built for open headless WordPress development.
-
----
-
-## 📦 JSON Output (Structured)
-
-You can fetch clean JSON responses by appending `?format=json` to any endpoint.
-
-### Example:
-```
-/wp-json/headless-elementor/v1/slug/home?format=json
-```
-
-### Optional: Limit returned fields using `fields=...`:
-```
-/wp-json/headless-elementor/v1/slug/home?format=json&fields=id,title,html,acf
-```
-
-### Supported Fields:
-- `id` — Post ID
-- `title` — Post title
-- `slug` — Post slug
-- `type` — Post type
-- `html` — Rendered Elementor HTML
-- `acf` — ACF fields (if ACF is active)
-- `meta` — Post meta key/values
-- `terms` — Assigned taxonomy terms (slugs)
-- `debug` — Debug metadata (if `?debug=1`)
-
-### Combined Example:
-```
-/wp-json/headless-elementor/v1/slug/about?format=json&fields=title,acf,meta,terms&debug=1
-```
-
----
-
-This allows full control over how much content your frontend needs to fetch — similar to GraphQL, but over REST.
-
-
----
-
-## 🛒 WooCommerce Integration
-
-Expose WooCommerce product data via REST for headless storefronts.
-
-- **Endpoints:**
-  - `/wp-json/headless-elementor/v1/woo/products` – List all products
-  - `/wp-json/headless-elementor/v1/woo/product/{id}` – Get product by ID
-  - `/wp-json/headless-elementor/v1/woo/product/{slug}` – Get product by slug
-
-- **Returns:**
-  - JSON response with fields like:
-    - `id`, `name`, `price`, `regular_price`, `sale_price`, `slug`, `permalink`, etc.
-  - Easily extendable to return full Elementor-rendered HTML product pages.
-
-- **Frontend SDK:**
-  - SDK includes:
-    - `fetchAllWooProducts()`
-    - `fetchWooProduct(id)`
-    - `fetchWooProductBySlug(slug)`
-  - Useful for React, Next.js, Astro, or any frontend framework.
-
+Feel free to fork the repository and submit pull requests. We welcome contributions, bug fixes, and feature suggestions!
