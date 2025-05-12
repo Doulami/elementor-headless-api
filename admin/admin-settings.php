@@ -43,12 +43,12 @@ function eha_register_settings() {
     // HTML Output
     add_settings_section('eha_html_output', 'HTML Output Settings', '__return_false', 'eha-settings');
 
-    add_settings_field('inject_header', 'Inject Header Template', 'eha_render_select2_template_field', 'eha-settings', 'eha_html_output', ['id' => 'inject_header']);
-    add_settings_field('inject_footer', 'Inject Footer Template', 'eha_render_select2_template_field', 'eha-settings', 'eha_html_output', ['id' => 'inject_footer']);
+    add_settings_field('inject_header', 'Inject Header Template', 'eha_render_elementor_template_dropdown', 'eha-settings', 'eha_html_output', ['id' => 'inject_header']);
+    add_settings_field('inject_footer', 'Inject Footer Template', 'eha_render_elementor_template_dropdown', 'eha-settings', 'eha_html_output', ['id' => 'inject_footer']);
     
     
     add_settings_field('include_global_styles', 'Include Elementor Global Styles', 'eha_render_checkbox', 'eha-settings', 'eha_html_output', ['id' => 'include_global_styles']);
-    add_settings_field('strip_wp_noise', 'Strip WP Header/Footer Noise', 'eha_render_checkbox', 'eha-settings', 'eha_html_output', ['id' => 'strip_wp_noise']);
+    add_settings_field('strip_wp_noise', 'Strip WP Header/Footer/AdminBar Noise', 'eha_render_checkbox', 'eha-settings', 'eha_html_output', ['id' => 'strip_wp_noise']);
 
     // JSON Output
     add_settings_section('eha_json', 'JSON Output Settings', '__return_false', 'eha-settings');
@@ -62,7 +62,7 @@ function eha_register_settings() {
     // WooCommerce
     add_settings_section('eha_woo', 'WooCommerce Integration', '__return_false', 'eha-settings');
 
-    add_settings_field('eha_product_template_id', 'Woo Product Template ID', 'eha_render_woo_template_select2', 'eha-settings', 'eha_woo'); 
+    add_settings_field('eha_product_template_id', 'Woo Product Template ID', 'eha_render_elementor_template_dropdown', 'eha-settings', 'eha_woo'); 
      
 
 
@@ -96,25 +96,84 @@ function eha_render_post_types_field() {
     $options = get_option('eha-settings');
     $allowed = isset($options['allowed_post_types']) ? $options['allowed_post_types'] : [];
 
-    $post_types = get_post_types(['public' => true], 'objects');
+    // Get all post types
+    $post_types = get_post_types([], 'objects');
+
+    // Output the "Check All" checkbox
+    echo "<label><input type='checkbox' id='eha-check-all'> <strong>Select All</strong></label><br/><br/>";
+
+    // Output the individual post type checkboxes
     foreach ($post_types as $pt) {
+        if (!isset($pt->show_ui) || !$pt->show_ui) {
+            continue;
+        }
+
         $checked = in_array($pt->name, $allowed) ? 'checked' : '';
-        echo "<label><input type='checkbox' name='eha-settings[allowed_post_types][]' value='{$pt->name}' $checked> {$pt->labels->singular_name}</label><br/>";
+        echo "<label><input class='eha-post-type-checkbox' type='checkbox' name='eha-settings[allowed_post_types][]' value='{$pt->name}' $checked> {$pt->labels->singular_name}</label><br/>";
+    }
+
+    // Add JavaScript to handle "Check All"
+    ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const checkAll = document.getElementById('eha-check-all');
+            const checkboxes = document.querySelectorAll('.eha-post-type-checkbox');
+
+            if (!checkAll) return;
+
+            // Update all when "check all" is toggled
+            checkAll.addEventListener('change', function () {
+                checkboxes.forEach(cb => cb.checked = checkAll.checked);
+            });
+
+            // Update "check all" based on individual checks
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    checkAll.checked = Array.from(checkboxes).every(cb => cb.checked);
+                });
+            });
+
+            // Initial sync
+            checkAll.checked = Array.from(checkboxes).every(cb => cb.checked);
+        });
+    </script>
+    <?php
+}
+
+
+
+function eha_render_checkbox($args) {
+    $id = $args['id'];
+    $option = get_option($id);
+    $checked = checked(1, $option, false);
+
+    // Only hide the label for 'include_global_styles'
+    if ($id === 'include_global_styles') {
+        echo '<label style="display:none;">';
+        echo '<input type="checkbox" id="' . esc_attr($id) . '" name="' . esc_attr($id) . '" value="1" ' . $checked . ' />';
+        echo ' Include Elementor Global Styles';
+        echo '</label>';
+    } else {
+        echo '<label>';
+        echo '<input type="checkbox" id="' . esc_attr($id) . '" name="' . esc_attr($id) . '" value="1" ' . $checked . ' />';
+        echo ' ' . esc_html($id);
+        echo '</label>';
+    }
+
+    // Additional message for 'include_global_styles'
+    if ($id === 'include_global_styles') {
+        $css_method = get_option('elementor_css_print_method');
+
+        if ($css_method !== 'internal') {
+            echo '<span style="margin-left: 10px; color: #856404;"><strong>⚠️ Performance Tip:</strong> Set Elementor CSS method to <strong>Internal Embedding</strong> for cleaner HTML. ';
+            echo '<a href="admin.php?page=elementor-settings#tab-performance" target="_blank">Change Settings</a></span>';
+        } else {
+            echo '<span style="margin-left: 10px; color: #155724;"><strong>✅ All Good:</strong> Internal Embedding is enabled. ';
+            echo '<a href="admin.php?page=elementor-settings#tab-performance" target="_blank">Change Settings</a></span>';
+        }
     }
 }
 
-function eha_render_checkbox($args) {
-    $options = get_option('eha-settings');
-    $id = $args['id'];
-    $checked = isset($options[$id]) && $options[$id] ? 'checked' : '';
-    echo "<input type='checkbox' name='eha-settings[$id]' value='1' $checked />";
-    if ($id === 'include_global_styles' && get_option('elementor_experiment_improved_css_loading') !== 'active') {
-        echo '<div class=\"notice notice-warning\" style=\"margin:10px 0;padding:10px;background:#fff3cd;border-left:5px solid #ffcc00;\">';
-        echo '<p><strong>Performance Tip:</strong> Elementor’s Inline CSS mode is currently <strong>disabled</strong>. For cleaner HTML and faster rendering, consider enabling it.</p>';
-        echo '<p><a href=\"admin.php?page=elementor#tab-advanced\" target=\"_blank\" class=\"button button-small\">Go to Elementor Settings</a></p>';
-        echo '</div>';
-    }
-}
 
 function eha_render_number($args) {
     $options = get_option('eha-settings');
@@ -122,33 +181,36 @@ function eha_render_number($args) {
     $val = isset($options[$id]) ? intval($options[$id]) : '';
     echo "<input type='number' name='eha-settings[$id]' value='$val' />";
 }
-
 function eha_render_elementor_template_dropdown($args) {
     $options = get_option('eha-settings');
     $id = $args['id'];
     $selected = isset($options[$id]) ? $options[$id] : '';
 
-    $templates = get_posts([
-        'post_type' => 'elementor_library',
-        'posts_per_page' => -1,
-        'post_status' => 'publish'
-    ]);
-
     echo "<select name='eha-settings[$id]'>";
     echo "<option value=''>-- None --</option>";
+
+$all_post_types = get_post_types([], 'names'); // get even non-public ones
+$templates = get_posts([
+    'posts_per_page' => -1,
+    'post_status'    => 'publish',
+    'post_type'      => $all_post_types,
+]);
+
     foreach ($templates as $tpl) {
         $is_selected = selected($selected, $tpl->ID, false);
         echo "<option value='{$tpl->ID}' $is_selected>{$tpl->post_title}</option>";
     }
-    
+
+    // Optional notice for canvas template when no header/footer selected
     if ($id === 'inject_header') {
         $current_post_id = isset($_GET['post']) ? intval($_GET['post']) : 0;
         $template_slug = $current_post_id ? get_page_template_slug($current_post_id) : '';
         $using_canvas = $template_slug === 'elementor_canvas';
         $settings = get_option('eha-settings');
+
         if (empty($settings['inject_header']) && empty($settings['inject_footer']) && !$using_canvas) {
-            echo '<div class=\"notice notice-warning\" style=\"margin:10px 0;padding:10px;background:#fff3cd;border-left:5px solid #ffcc00;\">';
-            echo '<p><strong>Heads up:</strong> No Elementor Header/Footer templates selected, and this page is not using the <code>Elementor Canvas</code> layout. Your theme’s layout may not appear in headless output.</p>';
+            echo '<div class="notice notice-warning" style="margin:10px 0;padding:10px;background:#fff3cd;border-left:5px solid #ffcc00;">';
+            echo '<p><strong>Heads up:</strong> No Header/Footer selected, and this page is not using the <code>Elementor Canvas</code> layout. The headless output might not include your theme layout.</p>';
             if (!empty($template_slug)) {
                 echo '<p>Current Template: <code>' . esc_html($template_slug) . '</code></p>';
             }
@@ -158,6 +220,7 @@ function eha_render_elementor_template_dropdown($args) {
 
     echo "</select>";
 }
+
 
 
 add_action('admin_enqueue_scripts', 'eha_enqueue_template_search_assets');
@@ -257,13 +320,14 @@ function eha_get_all_stylesheets($page_id) {
     $stylesheets = [
         'theme' => [],
         'elementor' => [],
-        'global' => [],  // Added a 'global' group for global styles
+        'global' => [],  // For global styles like Elementor's injected styles
         'other' => []
     ];
 
-    // Get stylesheets enqueued by WordPress (theme and plugins)
+    // Get all enqueued stylesheets from WordPress (theme and plugins)
     global $wp_styles;
 
+    // Loop through all enqueued styles
     foreach ($wp_styles->queue as $handle) {
         $stylesheet = $wp_styles->registered[$handle];
         $stylesheet_url = $stylesheet->src;
@@ -280,103 +344,391 @@ function eha_get_all_stylesheets($page_id) {
             $stylesheets['other'][] = ['id' => $handle, 'url' => $stylesheet_url, 'label' => $stylesheet->handle];
         }
     }
-
-    // Get Elementor global styles - manually inspect the styles
-    if (class_exists('Elementor\Plugin')) {
-        // Check if Elementor frontend exists and pull global stylesheets
-        $elementor_styles = ElementorPlugin::$instance->frontend->get_stylesheets();
+	
+/*/ Check if Elementor is active and initialized
+if (class_exists('Elementor\Plugin') && Elementor\Plugin::$instance->frontend) {
+    try {
+ 
         
-        // Push global styles into the 'global' group
-        foreach ($elementor_styles as $style) {
-            // Verify that $style contains a valid URL
-            if (isset($style['src'])) {
-                $stylesheets['global'][] = [
-                    'id' => $style['id'] ?? '',
-                    'url' => $style['src'],
-                    'label' => $style['handle'] ?? 'Global Style'
-                ];
+ 
+        
+        // Method 3: Last resort - generate from settings
+        if (empty($global_css)) {
+
+  if (empty($global_css)) {
+    echo "<!-- Entering kit fallback section -->\n";
+    
+    $kit = Elementor\Plugin::$instance->kits_manager->get_active_kit();
+    //var_dump('Kit object:', $kit); // Check if kit exists
+    
+    if ($kit) {
+        echo "<!-- Kit exists -->\n";
+        
+        // 1. First try getting all kit settings
+        $all_settings = $kit->get_settings();
+        var_dump('All kit settings:', $all_settings);
+        
+        // 2. Specifically check for custom CSS
+        $custom_css = $kit->get_settings('custom_css');
+        var_dump('Custom CSS:', $custom_css);
+        
+        // 3. Check system colors and fonts which generate global CSS
+        $system_items = [
+            'system_colors',
+            'system_typography',
+            'custom_colors',
+            'custom_typography'
+        ];
+        
+        foreach ($system_items as $item) {
+            $settings = $kit->get_settings($item);
+            var_dump("{$item} settings:", $settings);
+        }
+        
+        // 4. Try to force-generate the CSS
+        if (method_exists($kit, 'get_frontend_settings')) {
+            $frontend_settings = $kit->get_frontend_settings();
+            var_dump('Frontend settings:', $frontend_settings);
+            
+            if (!empty($frontend_settings['custom_css'])) {
+                $global_css = $frontend_settings['custom_css'];
+                echo "<!-- Found custom CSS in frontend settings -->\n";
             }
         }
+        
+        if (empty($global_css)) {
+            echo "<!-- Still no CSS found -->\n";
+            error_log('Elementor Kit exists but no global CSS found in: ' . print_r($all_settings, true));
+        }
+    } else {
+        echo "<!-- No active kit found -->\n";
+        error_log('No active Elementor kit found');
     }
+}
+        }
+
+        if (empty($global_css)) {
+            error_log('Elementor global styles are empty. Check your Elementor Site Settings.');
+        }
+    } catch (Exception $e) {
+        error_log('Error getting Elementor styles: ' . $e->getMessage());
+    }
+} else {
+    error_log('Elementor is not active or not initialized.');
+}
+  /*/
 
     return $stylesheets;
 }
 
-function eha_render_debug_interface() {
-    // Get all pages (use the previously defined function)
-    $pages = eha_get_all_pages();
 
+add_action('admin_enqueue_scripts', 'eha_enqueue_code_editor');
+function eha_enqueue_code_editor($hook) {
+    if (isset($_GET['page']) && $_GET['page'] == 'eha-render-debug') {
+        // Enqueue Ace editor core script
+        wp_enqueue_script('ace-editor', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js', [], null, true);
+
+        // Enqueue the Monokai theme and JavaScript mode script
+        wp_enqueue_script('ace-editor-monokai', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-monokai.js', ['ace-editor'], null, true);
+        wp_enqueue_script('ace-editor-javascript', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-javascript.js', ['ace-editor'], null, true);
+    }
+}
+ 
+add_action('admin_head', 'eha_add_editor_styles');
+function eha_add_editor_styles() {
     ?>
-    <div class="wrap">
-        <h1>Render Page with Stylesheets - Debug Tools</h1>
-        <form method="POST">
-            <!-- Page Selector -->
-            <label for="page-selector">Select a Page</label>
-            <select name="page-id" id="page-selector">
-                <?php foreach ($pages as $page) : ?>
-                    <option value="<?php echo esc_attr($page->ID); ?>"><?php echo esc_html($page->post_title); ?></option>
-                <?php endforeach; ?>
-            </select>
-
-            <!-- Stylesheet Selector -->
-            <h3>Select Stylesheets</h3>
-
-            <?php 
-            // Get all stylesheets for the selected page
-            $stylesheets = eha_get_all_stylesheets($pages[0]->ID); // Default to the first page
-
-            // Grouped stylesheets
-            foreach ($stylesheets as $group => $group_stylesheets) : ?>
-                <h4><?php echo ucfirst($group); ?> Stylesheets</h4>
-                <?php foreach ($group_stylesheets as $stylesheet) : ?>
-                    <label for="stylesheet-<?php echo esc_attr($stylesheet['id']); ?>">
-                        <input type="checkbox" name="stylesheets[]" id="stylesheet-<?php echo esc_attr($stylesheet['id']); ?>" value="<?php echo esc_attr($stylesheet['url']); ?>" checked />
-                        <?php echo esc_html($stylesheet['label']); ?>
-                    </label><br>
-                <?php endforeach; ?>
-            <?php endforeach; ?>
-
-            <!-- Render Button -->
-            <button type="submit" name="render-page">Render Page</button>
-        </form>
-
-        <hr>
-
-        <!-- HTML Editor for the rendered page -->
-        <h2>Rendered HTML (Code Editor)</h2>
-        <div id="editor" style="height: 400px; width: 100%;"></div>  <!-- Container for the Ace Editor -->
-
-        <?php
-        if (isset($_POST['render-page'])) {
-            $page_id = $_POST['page-id'];
-            $selected_stylesheets = isset($_POST['stylesheets']) ? $_POST['stylesheets'] : [];
-
-            // Render the page HTML with selected stylesheets
-            $html_content = eha_render_page_html($page_id, $selected_stylesheets);
-
-            echo '<h3>Rendered HTML</h3>';
-            echo '<pre>' . esc_html($html_content) . '</pre>';
+    <style type="text/css">
+        #editor {
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            height: 500px; /* Adjust as needed */
+            font-size: 14px;
         }
-        ?>
-    </div>
-
-    <script type="text/javascript">
-        // Initialize Ace Editor
-        var editor = ace.edit("editor");
-        editor.setTheme("ace/theme/monokai"); 
-        editor.getSession().setMode("ace/mode/html");
-
-        // Set the content of the editor with the rendered HTML
-        editor.setValue('<?php echo addslashes($html_content); ?>');
-    </script>
+    </style>
     <?php
 }
+function eha_render_debug_interface() {
+    $pages = eha_get_all_pages();
+    $current_page_id = isset($_POST['page-id']) ? intval($_POST['page-id']) : ($pages[0]->ID ?? 0);
+    ?>
+    <div class="wrap">
+        <h1>Page Render Debugger</h1>
+        
+        <!-- Form Section -->
+        <form method="POST">
+            <table class="form-table">
+                <tr>
+                    <th scope="row"><label for="page-selector">Select Page</label></th>
+                    <td>
+                        <select name="page-id" id="page-selector" class="regular-text">
+                            <?php foreach ($pages as $page) : ?>
+                                <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($page->ID, $current_page_id); ?>>
+                                    <?php echo esc_html($page->post_title); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
+                
+                <tr>
+                    <th scope="row">Included Stylesheets</th>
+                    <td>
+                        <fieldset style="max-height: 200px; overflow-y: auto; padding: 10px; border: 1px solid #ddd; background: #f9f9f9;">
+                            <?php 
+                            $stylesheets = eha_get_all_stylesheets($current_page_id);
+                            foreach ($stylesheets as $group => $group_stylesheets) : ?>
+                                <h4 style="margin: 0 0 5px 0;"><?php echo ucfirst($group); ?></h4>
+                                <?php foreach ($group_stylesheets as $stylesheet) : ?>
+                                    <label style="display: block; margin: 2px 0; padding: 3px 5px; background: #fff; border-radius: 3px;">
+                                        <input type="checkbox" name="stylesheets[]" 
+                                               value="<?php echo esc_attr($stylesheet['url']); ?>"
+                                               checked />
+                                        <?php echo esc_html($stylesheet['label']); ?>
+                                        <small style="color: #666;">(<?php echo esc_html(basename($stylesheet['url'])); ?>)</small>
+                                    </label>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
+                        </fieldset>
+                    </td>
+                </tr>
+            </table>
+            
+            <p class="submit">
+                <button type="submit" name="render-page" class="button button-primary">
+                    <span class="dashicons dashicons-editor-code"></span> Render Page
+                </button>
+            </p>
+        </form>
 
-function eha_enqueue_code_editor() {
-    // Only load on the tools/debug page
-    if (isset($_GET['page']) && $_GET['page'] == 'eha-render-debug') {
-        // Enqueue Ace editor
-        wp_enqueue_script('ace-editor', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js', [], null, true);
-        wp_enqueue_style('ace-editor-style', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-monokai.min.css', [], null);
-    }
+        <?php if (isset($_POST['render-page'])) : ?>
+            <?php
+            $renderer = new EHA_Renderer();
+            $html_content = $renderer->render_elementor_page($current_page_id);
+
+            if (is_wp_error($html_content)) {
+                echo '<div class="notice notice-error"><p>Error: ' . esc_html($html_content->get_error_message()) . '</p></div>';
+            } else {
+                // 1. COLLECT ALL CSS CONTENT
+                $all_css = '';
+                $selected_stylesheets = $_POST['stylesheets'] ?? [];
+                $stylesheet_contents = [];
+                
+                foreach ($selected_stylesheets as $stylesheet_url) {
+                    if (!preg_match('/^https?:\/\//', $stylesheet_url)) {
+                        $stylesheet_url = site_url($stylesheet_url);
+                    }
+                    
+                    $response = wp_remote_get($stylesheet_url);
+                    if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+                        $css_content = wp_remote_retrieve_body($response);
+                        $stylesheet_contents[] = $css_content;
+                        $all_css .= $css_content . "\n";
+                    }
+                }
+                
+                // Get inline styles
+                preg_match_all('/<style[^>]*>(.*?)<\/style>/s', $html_content, $style_matches);
+                foreach ($style_matches[1] as $style_content) {
+                    $all_css .= $style_content . "\n";
+                }
+
+                // 2. EXTRACT CLASSES AND THEIR RULES
+                $css_output = "/* CSS CLASSES AND PROPERTIES */\n\n";
+                $found_classes = [];
+                
+                preg_match_all('/class="([^"]*)"/', $html_content, $class_matches);
+                if (!empty($class_matches[1])) {
+                    foreach ($class_matches[1] as $class_string) {
+                        $classes = array_unique(array_filter(array_map('trim', explode(' ', $class_string))));
+                        foreach ($classes as $class) {
+                            if (!empty($class) && !isset($found_classes[$class])) {
+                                $found_classes[$class] = true;
+                                $css_output .= "/* === .$class === */\n";
+                                
+                                $rules_found = false;
+                                if (preg_match_all('/\.'.preg_quote($class, '/').'(?:\b[^{]*)?\{([^}]*)\}/', $all_css, $rule_matches)) {
+                                    foreach (array_unique($rule_matches[0]) as $rule) {
+                                        $css_output .= $rule . "\n";
+                                        $rules_found = true;
+                                    }
+                                }
+                                
+                                if (preg_match_all('/[^}]*\.'.preg_quote($class, '/').'[^{]*\{([^}]*)\}/', $all_css, $rule_matches)) {
+                                    foreach (array_unique($rule_matches[0]) as $rule) {
+                                        $css_output .= $rule . "\n";
+                                        $rules_found = true;
+                                    }
+                                }
+                                
+                                if (!$rules_found) {
+                                    $css_output .= "/* No direct rules found */\n";
+                                }
+                                $css_output .= "\n";
+                            }
+                        }
+                    }
+                }
+                
+                $css_output = "/* Found " . count($found_classes) . " unique classes */\n\n" . $css_output;
+                
+                // Prepare the preview HTML with proper base URL
+                $preview_html = '<!DOCTYPE html><html><head>';
+                $preview_html .= '<base href="' . site_url() . '">';
+                $preview_html .= '<style>' . implode("\n", $stylesheet_contents) . '</style>';
+                $preview_html .= '</head><body>' . $html_content . '</body></html>';
+                ?>
+                
+                <hr>
+                
+                <!-- Editors Section -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                    <div>
+                        <h2>Rendered HTML</h2>
+                        <div id="editor-html" style="height: 500px; width: 100%; border: 1px solid #ddd;"></div>
+                    </div>
+                    <div>
+                        <h2>CSS Classes and Properties</h2>
+                        <div id="editor-css" style="height: 500px; width: 100%; border: 1px solid #ddd;"></div>
+                    </div>
+                </div>
+
+                <!-- Live Preview Section -->
+                <h2>Live Preview <small>(<a href="<?php echo get_permalink($current_page_id); ?>" target="_blank">View Actual Page</a>)</small></h2>
+                <div style="border: 1px solid #ddd; padding: 20px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <iframe id="live-preview-iframe" src="about:blank" style="width: 100%; height: 600px; border: 1px solid #eee;"></iframe>
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button id="refresh-preview" class="button button-secondary" style="margin-right: 10px;">
+                            <span class="dashicons dashicons-update"></span> Refresh Preview
+                        </button>
+                        <button id="apply-css" class="button button-primary" style="margin-left: 10px;">
+                            <span class="dashicons dashicons-yes"></span> Apply CSS Changes
+                        </button>
+                        <button id="open-fullscreen" class="button button-secondary" style="margin-left: 10px;">
+                            <span class="dashicons dashicons-editor-expand"></span> Fullscreen
+                        </button>
+                    </div>
+                </div>
+
+                <script type="text/javascript">
+                jQuery(document).ready(function($) {
+                    // Initialize the preview iframe
+                    var previewIframe = document.getElementById('live-preview-iframe');
+                    var previewDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
+                    previewDoc.open();
+                    previewDoc.write(<?php echo json_encode($preview_html); ?>);
+                    previewDoc.close();
+                    
+                    // Store original styles
+                    var originalStyles = <?php echo json_encode(implode("\n", $stylesheet_contents)); ?>;
+                    
+                    // Initialize Ace Editors
+                    if (typeof ace !== 'undefined') {
+                        var htmlEditor = ace.edit("editor-html");
+                        htmlEditor.setTheme("ace/theme/monokai");
+                        htmlEditor.session.setMode("ace/mode/html");
+                        htmlEditor.setValue(<?php echo json_encode($html_content); ?>);
+                        htmlEditor.setOptions({
+                            showLineNumbers: true,
+                            highlightActiveLine: true,
+                            fontSize: "13px"
+                        });
+                        
+                        var cssEditor = ace.edit("editor-css");
+                        cssEditor.setTheme("ace/theme/monokai");
+                        cssEditor.session.setMode("ace/mode/css");
+                        cssEditor.setValue(<?php echo json_encode($css_output); ?>);
+                        cssEditor.setOptions({
+                            showLineNumbers: true,
+                            highlightActiveLine: true,
+                            fontSize: "13px"
+                        });
+                    }
+
+                    // Preview Controls
+                    $('#refresh-preview').on('click', function() {
+                        var newContent = '<!DOCTYPE html><html><head><base href="<?php echo site_url(); ?>">';
+                        newContent += '<style>' + originalStyles + '</style></head><body>';
+                        newContent += htmlEditor.getValue() + '</body></html>';
+                        
+                        var iframe = document.getElementById('live-preview-iframe');
+                        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        iframeDoc.open();
+                        iframeDoc.write(newContent);
+                        iframeDoc.close();
+                        
+                        $(this).find('.dashicons').addClass('spin');
+                        setTimeout(() => {
+                            $(this).find('.dashicons').removeClass('spin');
+                        }, 500);
+                    });
+
+                    $('#apply-css').on('click', function() {
+                        var iframe = document.getElementById('live-preview-iframe');
+                        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        var styleTag = iframeDoc.querySelector('style');
+                        
+                        if (styleTag) {
+                            styleTag.innerHTML = cssEditor.getValue();
+                        } else {
+                            var newStyle = iframeDoc.createElement('style');
+                            newStyle.innerHTML = cssEditor.getValue();
+                            iframeDoc.head.appendChild(newStyle);
+                        }
+                        
+                        $(this).find('.dashicons').addClass('spin');
+                        setTimeout(() => {
+                            $(this).find('.dashicons').removeClass('spin');
+                        }, 500);
+                    });
+
+                    $('#open-fullscreen').on('click', function() {
+                        var iframe = document.getElementById('live-preview-iframe');
+                        var iframeContent = iframe.contentDocument || iframe.contentWindow.document;
+                        var fullscreenWindow = window.open('', 'fullscreenPreview', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
+                        
+                        fullscreenWindow.document.open();
+                        fullscreenWindow.document.write(iframeContent.documentElement.outerHTML);
+                        fullscreenWindow.document.close();
+                        
+                        // Add controls to fullscreen window
+                        var controls = fullscreenWindow.document.createElement('div');
+                        controls.style.position = 'fixed';
+                        controls.style.bottom = '20px';
+                        controls.style.right = '20px';
+                        controls.style.zIndex = '999999';
+                        controls.innerHTML = '<button id="fs-apply-css" style="padding: 8px 15px; background: #2271b1; color: white; border: none; border-radius: 3px; margin-right: 10px;">Apply CSS</button>' +
+                                             '<button id="fs-close" style="padding: 8px 15px; background: #cc1818; color: white; border: none; border-radius: 3px;">Close</button>';
+                        
+                        fullscreenWindow.document.body.appendChild(controls);
+                        
+                        fullscreenWindow.document.getElementById('fs-apply-css').addEventListener('click', function() {
+                            var styleTag = fullscreenWindow.document.querySelector('style');
+                            if (styleTag) {
+                                styleTag.innerHTML = cssEditor.getValue();
+                            }
+                        });
+                        
+                        fullscreenWindow.document.getElementById('fs-close').addEventListener('click', function() {
+                            fullscreenWindow.close();
+                        });
+                    });
+                });
+                </script>
+
+                <style>
+                .dashicons.spin {
+                    animation: dashicons-spin 1s infinite linear;
+                    display: inline-block;
+                }
+                @keyframes dashicons-spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                </style>
+            <?php } ?>
+        <?php endif; ?>
+    </div>
+    <?php
 }
