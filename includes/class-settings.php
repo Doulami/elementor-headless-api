@@ -34,38 +34,51 @@ class EHA_Settings {
         return in_array($post_type, $allowed);
     }
 
-    public static function cache_enabled() {
-        return self::is_enabled('enable_cache');
-    }
+    
 
     public static function get_cache_ttl() {
         $ttl = intval(self::get('cache_duration', 12));
         return max(1, $ttl) * HOUR_IN_SECONDS;
     }
 
-    public static function allow_nocache() {
-        return self::is_enabled('allow_nocache');
+   
+// fixed cache by retriving it from eha-settings insted of using the is_enabled method
+    public static function cache_enabled() {
+        $options = get_option('eha-settings');
+        return isset($options['enable_cache']) && $options['enable_cache'];
     }
+    // allow nochache still not working as expected
+    public static function allow_nocache() {
+        $options = get_option('eha-settings');
+        return isset($options['allow_nocache']) && $options['allow_nocache'];
+    }
+
+
+
+
 
     public static function debug_enabled() {
         return self::is_enabled('enable_debug');
     }
 
     public static function include_global_styles() {
-        return self::is_enabled('include_global_styles');
+        return get_option('include_global_styles', 1);
     }
 
     public static function strip_wp_noise() {
         return self::is_enabled('strip_wp_noise');
     }
 
-    public static function inject_header_id() {
-        return absint(self::get('inject_header'));
+     public static function inject_header_id() {
+        $options = get_option('eha-settings');
+        return isset($options['inject_header']) ? (int)$options['inject_header'] : false;
     }
 
     public static function inject_footer_id() {
-        return absint(self::get('inject_footer'));
+        $options = get_option('eha-settings');
+        return isset($options['inject_footer']) ? (int)$options['inject_footer'] : false;
     }
+
 
     public static function json_enabled() {
         return self::is_enabled('enable_json');

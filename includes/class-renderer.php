@@ -11,21 +11,32 @@ class EHA_Renderer {
         $as_json       = isset($_GET['format']) && strtolower($_GET['format']) === 'json' && EHA_Settings::json_enabled();
         $fields_param  = isset($_GET['fields']) ? explode(',', $_GET['fields']) : [];
 
+
+        print_r('</n>bypassss</n>'. $bypass_cache.'</n>') ;
+        print_r('</n>nocache</n>'. $_GET['nocache'].'</n>') ;
+     
+        
+        print_r('</n>cache_enabled</n>'.EHA_Settings::cache_enabled().'</n>')  ; 
+        print_r('</n>allow_nocache</n>'.EHA_Settings::allow_nocache().'</n>')  ; 
+       
+
         if (!$bypass_cache && EHA_Settings::cache_enabled()) {
             $cached = get_transient($cache_key);
+             
             if ($cached) {
                 if ($debug) {
                     $html .= '<!-- Elementor rendering active. Header/Footer not injected: ';
                     $html .= 'Header ID=' . ($header_id ?: 'none') . ', Footer ID=' . ($footer_id ?: 'none');
                     $html .= ' -->';
                 }
-                return $this->final_output($post_id, $cached, true, $debug, $as_json, $fields_param);
+                 return $this->final_output($post_id, $cached, true, $debug, $as_json, $fields_param);
             }
         }
-
+            
         $html = '';
-
+            
         if (ElementorPlugin::$instance->documents->get($post_id)->is_built_with_elementor()) {
+          
 
             if (EHA_Settings::include_global_styles()) {
                 ob_start();
@@ -39,27 +50,37 @@ class EHA_Renderer {
 
             $header_id = EHA_Settings::inject_header_id();
             $footer_id = EHA_Settings::inject_footer_id();
-
+			  print_r("Header ID: " . $header_id); // Debug
+    		print_r("Footer ID: " . $footer_id); // Debug
             $header_html = '';
             $footer_html = '';
-
+print_r("is_numeric " . is_numeric($header_id)); // Debug
+print_r("!empty " . !empty($header_id)); // Debug
             if (!empty($header_id) && is_numeric($header_id)) {
                 $header_html = ElementorPlugin::instance()->frontend->get_builder_content_for_display($header_id);
+				print_r("Header content length: " . strlen($header_html)); // Debug
             }
 
             if (!empty($footer_id) && is_numeric($footer_id)) {
                 $footer_html = ElementorPlugin::instance()->frontend->get_builder_content_for_display($footer_id);
+				 print_r("Footer content length: " . strlen($footer_html)); // Debug
             }
 
             $html = ElementorPlugin::instance()->frontend->get_builder_content_for_display($post_id);
-            $html = $styles . $header_html . $html . $footer_html;
+          //  $html = 'test' . $styles .'heeeeeeeeeeader'. $header_html .'heeeeeeeeeeader'. $html .'fooooooooooter'. $footer_html;
+$html = $styles . '<br/><br/>' . 
+        $header_html . '<br/><br/>' .
+        $html . '<br/><br/>' .
+        $footer_html;
 
         } else {
             $html = apply_filters('the_content', get_post_field('post_content', $post_id));
+            
         }
 
         if (EHA_Settings::strip_wp_noise()) {
             $html = $this->clean_html($html);
+
         }
 
         set_transient($cache_key, $html, 12 * HOUR_IN_SECONDS);
@@ -69,10 +90,12 @@ class EHA_Renderer {
             $html .= 'Header ID=' . ($header_id ?: 'none') . ', Footer ID=' . ($footer_id ?: 'none');
             $html .= ' -->';
         }
+      
         return $this->final_output($post_id, $html, false, $debug, $as_json, $fields_param);
     }
 
     private function final_output($post_id, $html, $cached, $debug, $as_json, $fields) {
+        
         if (!$as_json) return $html;
 
         $post = get_post($post_id);

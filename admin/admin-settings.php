@@ -140,30 +140,29 @@ function eha_render_post_types_field() {
     <?php
 }
 
-
-
 function eha_render_checkbox($args) {
+    $options = get_option('eha-settings');
     $id = $args['id'];
-    $option = get_option($id);
-    $checked = checked(1, $option, false);
-
+    $checked = isset($options[$id]) && $options[$id] ? 'checked="checked"' : '';
+    $value = isset($options[$id]) ? $options[$id] : '0';
+    
     // Only hide the label for 'include_global_styles'
     if ($id === 'include_global_styles') {
         echo '<label style="display:none;">';
-        echo '<input type="checkbox" id="' . esc_attr($id) . '" name="' . esc_attr($id) . '" value="1" ' . $checked . ' />';
+        echo "<input type='hidden' name='eha-settings[$id]' value='0'>"; // Hidden field for unchecked state
+        echo "<input type='checkbox' name='eha-settings[$id]' value='1' $checked />";
         echo ' Include Elementor Global Styles';
         echo '</label>';
     } else {
         echo '<label>';
-        echo '<input type="checkbox" id="' . esc_attr($id) . '" name="' . esc_attr($id) . '" value="1" ' . $checked . ' />';
-        echo ' ' . esc_html($id);
+        echo "<input type='hidden' name='eha-settings[$id]' value='0'>"; // Hidden field for unchecked state
+        echo "<input type='checkbox' name='eha-settings[$id]' value='1' $checked />";
         echo '</label>';
     }
 
     // Additional message for 'include_global_styles'
     if ($id === 'include_global_styles') {
         $css_method = get_option('elementor_css_print_method');
-
         if ($css_method !== 'internal') {
             echo '<span style="margin-left: 10px; color: #856404;"><strong>⚠️ Performance Tip:</strong> Set Elementor CSS method to <strong>Internal Embedding</strong> for cleaner HTML. ';
             echo '<a href="admin.php?page=elementor-settings#tab-performance" target="_blank">Change Settings</a></span>';
@@ -175,31 +174,55 @@ function eha_render_checkbox($args) {
 }
 
 
+
+
 function eha_render_number($args) {
     $options = get_option('eha-settings');
     $id = $args['id'];
     $val = isset($options[$id]) ? intval($options[$id]) : '';
     echo "<input type='number' name='eha-settings[$id]' value='$val' />";
 }
+
+
 function eha_render_elementor_template_dropdown($args) {
     $options = get_option('eha-settings');
     $id = $args['id'];
     $selected = isset($options[$id]) ? $options[$id] : '';
 
-    echo "<select name='eha-settings[$id]'>";
+    $select_id = 'eha-settings-' . esc_attr($id);
+
+    // Load Select2 assets (only once)
+    static $select2_loaded = false;
+    if (!$select2_loaded) {
+        echo '<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />';
+        echo '<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>';
+        echo '<script>
+            document.addEventListener("DOMContentLoaded", function() {
+                const selects = document.querySelectorAll(".eha-select2");
+                selects.forEach(function(select) {
+                    jQuery(select).select2();
+                });
+            });
+        </script>';
+        $select2_loaded = true;
+    }
+
+    echo "<select name='eha-settings[$id]' id='$select_id' class='eha-select2' >";
     echo "<option value=''>-- None --</option>";
 
-$all_post_types = get_post_types([], 'names'); // get even non-public ones
-$templates = get_posts([
-    'posts_per_page' => -1,
-    'post_status'    => 'publish',
-    'post_type'      => $all_post_types,
-]);
+    $all_post_types = get_post_types([], 'names'); // get even non-public ones
+    $templates = get_posts([
+        'posts_per_page' => -1,
+        'post_status'    => 'publish',
+        'post_type'      => $all_post_types,
+    ]);
 
     foreach ($templates as $tpl) {
         $is_selected = selected($selected, $tpl->ID, false);
         echo "<option value='{$tpl->ID}' $is_selected>{$tpl->post_title}</option>";
     }
+
+    echo "</select>";
 
     // Optional notice for canvas template when no header/footer selected
     if ($id === 'inject_header') {
@@ -217,9 +240,9 @@ $templates = get_posts([
             echo '</div>';
         }
     }
-
-    echo "</select>";
 }
+
+
 
 
 
@@ -449,7 +472,8 @@ function eha_add_editor_styles() {
     </style>
     <?php
 }
-function eha_render_debug_interface() {
+
+  function eha_render_debug_interface() {
     $pages = eha_get_all_pages();
     $current_page_id = isset($_POST['page-id']) ? intval($_POST['page-id']) : ($pages[0]->ID ?? 0);
     ?>
@@ -471,28 +495,6 @@ function eha_render_debug_interface() {
                         </select>
                     </td>
                 </tr>
-                
-                <tr>
-                    <th scope="row">Included Stylesheets</th>
-                    <td>
-                        <fieldset style="max-height: 200px; overflow-y: auto; padding: 10px; border: 1px solid #ddd; background: #f9f9f9;">
-                            <?php 
-                            $stylesheets = eha_get_all_stylesheets($current_page_id);
-                            foreach ($stylesheets as $group => $group_stylesheets) : ?>
-                                <h4 style="margin: 0 0 5px 0;"><?php echo ucfirst($group); ?></h4>
-                                <?php foreach ($group_stylesheets as $stylesheet) : ?>
-                                    <label style="display: block; margin: 2px 0; padding: 3px 5px; background: #fff; border-radius: 3px;">
-                                        <input type="checkbox" name="stylesheets[]" 
-                                               value="<?php echo esc_attr($stylesheet['url']); ?>"
-                                               checked />
-                                        <?php echo esc_html($stylesheet['label']); ?>
-                                        <small style="color: #666;">(<?php echo esc_html(basename($stylesheet['url'])); ?>)</small>
-                                    </label>
-                                <?php endforeach; ?>
-                            <?php endforeach; ?>
-                        </fieldset>
-                    </td>
-                </tr>
             </table>
             
             <p class="submit">
@@ -510,223 +512,75 @@ function eha_render_debug_interface() {
             if (is_wp_error($html_content)) {
                 echo '<div class="notice notice-error"><p>Error: ' . esc_html($html_content->get_error_message()) . '</p></div>';
             } else {
-                // 1. COLLECT ALL CSS CONTENT
-                $all_css = '';
-                $selected_stylesheets = $_POST['stylesheets'] ?? [];
-                $stylesheet_contents = [];
+                // Get header and footer content
+                $header_id = EHA_Settings::inject_header_id();
+                $footer_id = EHA_Settings::inject_footer_id();
                 
-                foreach ($selected_stylesheets as $stylesheet_url) {
-                    if (!preg_match('/^https?:\/\//', $stylesheet_url)) {
-                        $stylesheet_url = site_url($stylesheet_url);
-                    }
-                    
-                    $response = wp_remote_get($stylesheet_url);
-                    if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
-                        $css_content = wp_remote_retrieve_body($response);
-                        $stylesheet_contents[] = $css_content;
-                        $all_css .= $css_content . "\n";
-                    }
+                $header_html = '';
+                $footer_html = '';
+                
+                if ($header_id && is_numeric($header_id)) {
+                    $header_html = ElementorPlugin::instance()->frontend->get_builder_content_for_display($header_id);
                 }
                 
-                // Get inline styles
-                preg_match_all('/<style[^>]*>(.*?)<\/style>/s', $html_content, $style_matches);
-                foreach ($style_matches[1] as $style_content) {
-                    $all_css .= $style_content . "\n";
-                }
-
-                // 2. EXTRACT CLASSES AND THEIR RULES
-                $css_output = "/* CSS CLASSES AND PROPERTIES */\n\n";
-                $found_classes = [];
-                
-                preg_match_all('/class="([^"]*)"/', $html_content, $class_matches);
-                if (!empty($class_matches[1])) {
-                    foreach ($class_matches[1] as $class_string) {
-                        $classes = array_unique(array_filter(array_map('trim', explode(' ', $class_string))));
-                        foreach ($classes as $class) {
-                            if (!empty($class) && !isset($found_classes[$class])) {
-                                $found_classes[$class] = true;
-                                $css_output .= "/* === .$class === */\n";
-                                
-                                $rules_found = false;
-                                if (preg_match_all('/\.'.preg_quote($class, '/').'(?:\b[^{]*)?\{([^}]*)\}/', $all_css, $rule_matches)) {
-                                    foreach (array_unique($rule_matches[0]) as $rule) {
-                                        $css_output .= $rule . "\n";
-                                        $rules_found = true;
-                                    }
-                                }
-                                
-                                if (preg_match_all('/[^}]*\.'.preg_quote($class, '/').'[^{]*\{([^}]*)\}/', $all_css, $rule_matches)) {
-                                    foreach (array_unique($rule_matches[0]) as $rule) {
-                                        $css_output .= $rule . "\n";
-                                        $rules_found = true;
-                                    }
-                                }
-                                
-                                if (!$rules_found) {
-                                    $css_output .= "/* No direct rules found */\n";
-                                }
-                                $css_output .= "\n";
-                            }
-                        }
-                    }
+                if ($footer_id && is_numeric($footer_id)) {
+                    $footer_html = ElementorPlugin::instance()->frontend->get_builder_content_for_display($footer_id);
                 }
                 
-                $css_output = "/* Found " . count($found_classes) . " unique classes */\n\n" . $css_output;
+                // Get all CSS for the page
+                ob_start();
+                wp_head();
+                $styles = ob_get_clean();
                 
                 // Prepare the preview HTML with proper base URL
                 $preview_html = '<!DOCTYPE html><html><head>';
                 $preview_html .= '<base href="' . site_url() . '">';
-                $preview_html .= '<style>' . implode("\n", $stylesheet_contents) . '</style>';
-                $preview_html .= '</head><body>' . $html_content . '</body></html>';
+                $preview_html .= $styles;
+                $preview_html .= '</head><body>';
+                $preview_html .= $header_html;
+                $preview_html .= $html_content;
+                $preview_html .= $footer_html;
+                $preview_html .= '</body></html>';
                 ?>
                 
                 <hr>
                 
-                <!-- Editors Section -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-                    <div>
-                        <h2>Rendered HTML</h2>
-                        <div id="editor-html" style="height: 500px; width: 100%; border: 1px solid #ddd;"></div>
-                    </div>
-                    <div>
-                        <h2>CSS Classes and Properties</h2>
-                        <div id="editor-css" style="height: 500px; width: 100%; border: 1px solid #ddd;"></div>
-                    </div>
-                </div>
-
                 <!-- Live Preview Section -->
-                <h2>Live Preview <small>(<a href="<?php echo get_permalink($current_page_id); ?>" target="_blank">View Actual Page</a>)</small></h2>
+                <h2>Complete Page Preview</h2>
                 <div style="border: 1px solid #ddd; padding: 20px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                    <iframe id="live-preview-iframe" src="about:blank" style="width: 100%; height: 600px; border: 1px solid #eee;"></iframe>
+                    <iframe id="live-preview-iframe" srcdoc="<?php echo htmlspecialchars($preview_html, ENT_QUOTES); ?>" style="width: 100%; height: 600px; border: 1px solid #eee;"></iframe>
                     <div style="margin-top: 15px; text-align: center;">
-                        <button id="refresh-preview" class="button button-secondary" style="margin-right: 10px;">
+                        <button onclick="document.getElementById('live-preview-iframe').contentWindow.location.reload();" class="button button-secondary" style="margin-right: 10px;">
                             <span class="dashicons dashicons-update"></span> Refresh Preview
                         </button>
-                        <button id="apply-css" class="button button-primary" style="margin-left: 10px;">
-                            <span class="dashicons dashicons-yes"></span> Apply CSS Changes
-                        </button>
-                        <button id="open-fullscreen" class="button button-secondary" style="margin-left: 10px;">
+                        <button onclick="window.open('', 'fullscreenPreview', 'width='+screen.width+',height='+screen.height).document.write(document.getElementById('live-preview-iframe').srcdoc);" class="button button-secondary" style="margin-left: 10px;">
                             <span class="dashicons dashicons-editor-expand"></span> Fullscreen
                         </button>
                     </div>
                 </div>
 
-                <script type="text/javascript">
-                jQuery(document).ready(function($) {
-                    // Initialize the preview iframe
-                    var previewIframe = document.getElementById('live-preview-iframe');
-                    var previewDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
-                    previewDoc.open();
-                    previewDoc.write(<?php echo json_encode($preview_html); ?>);
-                    previewDoc.close();
-                    
-                    // Store original styles
-                    var originalStyles = <?php echo json_encode(implode("\n", $stylesheet_contents)); ?>;
-                    
-                    // Initialize Ace Editors
-                    if (typeof ace !== 'undefined') {
-                        var htmlEditor = ace.edit("editor-html");
-                        htmlEditor.setTheme("ace/theme/monokai");
-                        htmlEditor.session.setMode("ace/mode/html");
-                        htmlEditor.setValue(<?php echo json_encode($html_content); ?>);
-                        htmlEditor.setOptions({
-                            showLineNumbers: true,
-                            highlightActiveLine: true,
-                            fontSize: "13px"
-                        });
-                        
-                        var cssEditor = ace.edit("editor-css");
-                        cssEditor.setTheme("ace/theme/monokai");
-                        cssEditor.session.setMode("ace/mode/css");
-                        cssEditor.setValue(<?php echo json_encode($css_output); ?>);
-                        cssEditor.setOptions({
-                            showLineNumbers: true,
-                            highlightActiveLine: true,
-                            fontSize: "13px"
-                        });
-                    }
-
-                    // Preview Controls
-                    $('#refresh-preview').on('click', function() {
-                        var newContent = '<!DOCTYPE html><html><head><base href="<?php echo site_url(); ?>">';
-                        newContent += '<style>' + originalStyles + '</style></head><body>';
-                        newContent += htmlEditor.getValue() + '</body></html>';
-                        
-                        var iframe = document.getElementById('live-preview-iframe');
-                        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        iframeDoc.open();
-                        iframeDoc.write(newContent);
-                        iframeDoc.close();
-                        
-                        $(this).find('.dashicons').addClass('spin');
-                        setTimeout(() => {
-                            $(this).find('.dashicons').removeClass('spin');
-                        }, 500);
-                    });
-
-                    $('#apply-css').on('click', function() {
-                        var iframe = document.getElementById('live-preview-iframe');
-                        var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        var styleTag = iframeDoc.querySelector('style');
-                        
-                        if (styleTag) {
-                            styleTag.innerHTML = cssEditor.getValue();
-                        } else {
-                            var newStyle = iframeDoc.createElement('style');
-                            newStyle.innerHTML = cssEditor.getValue();
-                            iframeDoc.head.appendChild(newStyle);
-                        }
-                        
-                        $(this).find('.dashicons').addClass('spin');
-                        setTimeout(() => {
-                            $(this).find('.dashicons').removeClass('spin');
-                        }, 500);
-                    });
-
-                    $('#open-fullscreen').on('click', function() {
-                        var iframe = document.getElementById('live-preview-iframe');
-                        var iframeContent = iframe.contentDocument || iframe.contentWindow.document;
-                        var fullscreenWindow = window.open('', 'fullscreenPreview', 'width=' + screen.width + ',height=' + screen.height + ',fullscreen=yes');
-                        
-                        fullscreenWindow.document.open();
-                        fullscreenWindow.document.write(iframeContent.documentElement.outerHTML);
-                        fullscreenWindow.document.close();
-                        
-                        // Add controls to fullscreen window
-                        var controls = fullscreenWindow.document.createElement('div');
-                        controls.style.position = 'fixed';
-                        controls.style.bottom = '20px';
-                        controls.style.right = '20px';
-                        controls.style.zIndex = '999999';
-                        controls.innerHTML = '<button id="fs-apply-css" style="padding: 8px 15px; background: #2271b1; color: white; border: none; border-radius: 3px; margin-right: 10px;">Apply CSS</button>' +
-                                             '<button id="fs-close" style="padding: 8px 15px; background: #cc1818; color: white; border: none; border-radius: 3px;">Close</button>';
-                        
-                        fullscreenWindow.document.body.appendChild(controls);
-                        
-                        fullscreenWindow.document.getElementById('fs-apply-css').addEventListener('click', function() {
-                            var styleTag = fullscreenWindow.document.querySelector('style');
-                            if (styleTag) {
-                                styleTag.innerHTML = cssEditor.getValue();
-                            }
-                        });
-                        
-                        fullscreenWindow.document.getElementById('fs-close').addEventListener('click', function() {
-                            fullscreenWindow.close();
-                        });
-                    });
-                });
-                </script>
-
-                <style>
-                .dashicons.spin {
-                    animation: dashicons-spin 1s infinite linear;
-                    display: inline-block;
-                }
-                @keyframes dashicons-spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-                </style>
+                <!-- HTML Breakdown Section -->
+                <div style="margin-top: 30px;">
+                    <h2>HTML Breakdown</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <h3>Header Content</h3>
+                            <textarea readonly style="width: 100%; height: 200px; font-family: monospace;"><?php echo htmlspecialchars($header_html); ?></textarea>
+                        </div>
+                        <div>
+                            <h3>Main Content</h3>
+                            <textarea readonly style="width: 100%; height: 200px; font-family: monospace;"><?php echo htmlspecialchars($html_content); ?></textarea>
+                        </div>
+                        <div>
+                            <h3>Footer Content</h3>
+                            <textarea readonly style="width: 100%; height: 200px; font-family: monospace;"><?php echo htmlspecialchars($footer_html); ?></textarea>
+                        </div>
+                        <div>
+                            <h3>CSS Styles</h3>
+                            <textarea readonly style="width: 100%; height: 200px; font-family: monospace;"><?php echo htmlspecialchars($styles); ?></textarea>
+                        </div>
+                    </div>
+                </div>
             <?php } ?>
         <?php endif; ?>
     </div>
